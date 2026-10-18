@@ -28,8 +28,12 @@ st.set_page_config(
 # Gemini API Key
 # =========================================================
 
-GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
+import os
 
+GEMINI_API_KEY = (
+    st.secrets.get("GEMINI_API_KEY")
+    or os.getenv("GEMINI_API_KEY")
+)
 
 @st.cache_resource
 def get_gemini_client():
