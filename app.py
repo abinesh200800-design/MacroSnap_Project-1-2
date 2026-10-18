@@ -1,5 +1,7 @@
-import streamlit as st
+
+import os
 import time
+import streamlit as st
 
 from google import genai
 from google.genai import types
@@ -26,21 +28,31 @@ st.set_page_config(
 
 # =========================================================
 # Gemini API Key
+# Works with Render Environment Variables and local secrets
 # =========================================================
 
-import os
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-GEMINI_API_KEY = (
-    st.secrets.get("GEMINI_API_KEY")
-    or os.getenv("GEMINI_API_KEY")
-)
+if not GEMINI_API_KEY:
+    try:
+        GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
+    except Exception:
+        GEMINI_API_KEY = None
+
+if not GEMINI_API_KEY:
+    st.error(
+        "GEMINI_API_KEY is missing. "
+        "Please add it in Render Environment Variables."
+    )
+    st.stop()
+
 
 @st.cache_resource
-def get_gemini_client():
-    return genai.Client(api_key=GEMINI_API_KEY)
+def get_gemini_client(api_key):
+    return genai.Client(api_key=api_key)
 
 
-gemini_client = get_gemini_client()
+gemini_client = get_gemini_client(GEMINI_API_KEY)
 
 
 # =========================================================
@@ -48,20 +60,11 @@ gemini_client = get_gemini_client()
 # =========================================================
 
 def render_message(message):
-
     with st.chat_message(message["role"]):
-
         if message["kind"] == "text":
-
             if message["role"] == "assistant":
-
                 st.write(message["content"])
-
-                st.code(
-                    message["content"],
-                    language=None
-                )
-
+                st.code(message["content"], language=None)
             else:
                 st.write(message["content"])
 
@@ -74,7 +77,6 @@ def render_message(message):
 # =========================================================
 
 def add_message(role, kind, content):
-
     st.session_state.messages.append(
         {
             "role": role,
@@ -83,9 +85,7 @@ def add_message(role, kind, content):
         }
     )
 
-    render_message(
-        st.session_state.messages[-1]
-    )
+    render_message(st.session_state.messages[-1])
 
 
 # =========================================================
@@ -93,21 +93,15 @@ def add_message(role, kind, content):
 # =========================================================
 
 def ask_gemini(parts):
-
     for attempt in range(3):
-
         try:
-
             response = st.session_state.chat.send_message(parts)
-
-            return response.text
+            return response.text or "No response received."
 
         except Exception as error:
-
             error_text = str(error)
 
             if "503" in error_text or "UNAVAILABLE" in error_text:
-
                 if attempt < 2:
                     time.sleep(5)
                     continue
@@ -117,8 +111,10 @@ def ask_gemini(parts):
                     "Konjam neram kalichu try pannunga."
                 )
 
-            if "429" in error_text or "RESOURCE_EXHAUSTED" in error_text:
-
+            if (
+                "429" in error_text
+                or "RESOURCE_EXHAUSTED" in error_text
+            ):
                 return (
                     "Gemini quota mudinjiduchu 😕\n\n"
                     "Free tier-la current request limit reached. "
@@ -133,8 +129,7 @@ def ask_gemini(parts):
 # =========================================================
 
 if "onboarded" not in st.session_state:
-
-    st.title("")
+    st.title("MY CHAT 👍")
 
     st.caption(
         "Ask anything — education, technology, "
@@ -142,40 +137,24 @@ if "onboarded" not in st.session_state:
     )
 
     with st.form("onboarding_form"):
-
-        name = st.text_input(
-            "Your name"
-        )
-
-        submitted = st.form_submit_button(
-            "Let's go 🚀"
-        )
+        name = st.text_input("Your name")
+        submitted = st.form_submit_button("Let's go 🚀")
 
     if submitted:
-
         if not name.strip():
-
-            st.warning(
-                "Please enter your name."
-            )
-
+            st.warning("Please enter your name.")
         else:
-
             st.session_state.name = name.strip()
 
-            st.session_state.chat = (
-                gemini_client.chats.create(
-                    model=MODEL_NAME,
-                    config=types.GenerateContentConfig(
-                        system_instruction=SYSTEM_PROMPT
-                    ),
-                )
+            st.session_state.chat = gemini_client.chats.create(
+                model=MODEL_NAME,
+                config=types.GenerateContentConfig(
+                    system_instruction=SYSTEM_PROMPT
+                ),
             )
 
             st.session_state.messages = []
-
             st.session_state.onboarded = True
-
             st.rerun()
 
     st.stop()
@@ -185,7 +164,7 @@ if "onboarded" not in st.session_state:
 # Chat Interface
 # =========================================================
 
-st.title("MY CHAT👍")
+st.title("MY CHAT 👍")
 
 
 # =========================================================
@@ -193,7 +172,6 @@ st.title("MY CHAT👍")
 # =========================================================
 
 if not st.session_state.messages:
-
     add_message(
         "assistant",
         "text",
@@ -201,11 +179,8 @@ if not st.session_state.messages:
             name=st.session_state.name
         ),
     )
-
 else:
-
     for message in st.session_state.messages:
-
         render_message(message)
 
 
@@ -216,11 +191,7 @@ else:
 user_input = st.chat_input(
     "Ask anything or attach a photo",
     accept_file=True,
-    file_type=[
-        "jpg",
-        "jpeg",
-        "png",
-    ],
+    file_type=["jpg", "jpeg", "png"],
 )
 
 
@@ -229,7 +200,6 @@ user_input = st.chat_input(
 # =========================================================
 
 if user_input:
-
     photo = (
         user_input.files[0]
         if user_input.files
@@ -237,16 +207,13 @@ if user_input:
     )
 
     text = user_input.text
-
     parts = []
 
-
-    # =====================================================
+    # -----------------------------------------------------
     # Photo
-    # =====================================================
+    # -----------------------------------------------------
 
     if photo is not None:
-
         photo_bytes = photo.getvalue()
 
         add_message(
@@ -262,13 +229,11 @@ if user_input:
             )
         )
 
-
-    # =====================================================
+    # -----------------------------------------------------
     # Text
-    # =====================================================
+    # -----------------------------------------------------
 
     if text:
-
         add_message(
             "user",
             "text",
@@ -277,13 +242,11 @@ if user_input:
 
         parts.append(text)
 
-
-    # =====================================================
+    # -----------------------------------------------------
     # Photo Only
-    # =====================================================
+    # -----------------------------------------------------
 
     elif photo is not None:
-
         parts.append(
             """
             Analyze this image carefully.
@@ -301,17 +264,12 @@ if user_input:
             """
         )
 
-
-    # =====================================================
+    # -----------------------------------------------------
     # Get Gemini Response
-    # =====================================================
+    # -----------------------------------------------------
 
     if parts:
-
-        with st.spinner(
-            "Thinking... 🤔"
-        ):
-
+        with st.spinner("Thinking... 🤔"):
             answer = ask_gemini(parts)
 
         add_message(
